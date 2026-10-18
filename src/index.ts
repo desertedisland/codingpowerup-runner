@@ -4,3 +4,6 @@ export { readRunnerConfig, writeRunnerConfig, requireServer } from './config/Run
 export { detectCapabilities } from './capabilities/capabilities';
 export { describeProjects } from './repositories/RepositoryRegistry';
 export { connect, start, status } from './cli/commands';
+export { JobDispatcher } from './jobs/JobDispatcher';
+export { JobLedger } from './jobs/JobLedger';
+export { handlers } from './jobs/handlers';

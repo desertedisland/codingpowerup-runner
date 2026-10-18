@@ -30,7 +30,11 @@
   },
   "dependencies": {
     "@yellowmelon/factory-global-types": "file:../zenfactory/factory-global-types",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.295",
+    "@playwright/mcp": "^0.0.83",
+    "dotenv": "^16.4.5",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
@@ -49,7 +53,18 @@
     "transform": {
       "^.+\\.ts$": "ts-jest"
     },
-    "moduleFileExtensions": ["ts", "js", "json"],
-    "testPathIgnorePatterns": ["/node_modules/", "/dist/"]
+    "moduleFileExtensions": [
+      "ts",
+      "js",
+      "json"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/dist/"
+    ],
+    "moduleNameMapper": {
+      "^@anthropic-ai/claude-agent-sdk$": "<rootDir>/src/testUtils/agentSdkStub.ts"
+    },
+    "testTimeout": 30000
   }
 }

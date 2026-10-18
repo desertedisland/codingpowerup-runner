@@ -14,7 +14,7 @@ The specification is `docs/runner/SPEC.md` in the zenfactory repository. The pro
 are `@yellowmelon/factory-global-types` (its `runner/` folder), linked from the zenfactory
 checkout beside this one until the package is published.
 
-## What works (step 3 of the spec)
+## What works (steps 3 and 4 of the spec)
 
 ```
 codingpowerup-runner connect --server https://devapi.yellowmelon.co --code ABCD-EFGH [--name laptop]
@@ -27,27 +27,41 @@ codingpowerup-runner status
   projects. The file is private to the user; it is the only copy of the credential.
 - `start` connects to `<server>/runner/ws`, registers with the credential, reports what the
   machine can do (git, Node, Docker, Playwright's browser, Claude Code signed in) and which
-  configured projects are checked out (branch and commit), heartbeats, and reconnects with
-  backoff when the line drops. It stops for good when the server says the credential is dead,
-  the runner is too old for the protocol, or another instance of the same runner connected.
+  configured projects are checked out, heartbeats, reconnects with backoff, and **does the
+  jobs** the control plane sends: worktrees and branches, agent turns (the Claude Agent SDK,
+  running under `CLAUDE_CODE_OAUTH_TOKEN` from the runner's `.env` or the machine's own
+  `claude` login), the project's check command through a build queue, commits, landing on the
+  release and pushing, the git history, preview rebuilds. Every job is in `~/.codingpowerup/jobs.json`
+  until its result has reached the server, so a job is never run twice and a dropped line loses
+  nothing; a runner that restarted reports what it was running as failed.
 - `status` prints the local config and asks the server what it thinks.
 
-Nothing runs a job yet: the job traffic arrives at step 4.
+The agent's live tools (the plan tools, the Explore tools, the Build-mode question) are
+answered by the control plane over the socket, one `CALLBACK` frame per call. The owner's
+uploaded files are fetched per session into `~/.codingpowerup/attachments`, read-only to the
+agent.
+
+Layout: `src/connection` (the socket), `src/jobs` (dispatcher, ledger, handlers), `src/agents`
+(the Agent SDK turn, its tool server and guards), `src/git` (checkouts, worktrees, history),
+`src/queue` (the build queue), `src/process` (commands, detached starts, the child
+environment), `src/preview` (rebuilds), `src/attachments`, `src/repositories` and `src/config`
+(runner.json), `src/platform` (what differs per OS).
 
 ## runner.json
 
 ```json
 {
   "server": { "url": "https://devapi.yellowmelon.co", "runnerId": "...", "credential": "cpr_...", "name": "droplet" },
+  "capacity": { "concurrency": 2, "worktreeRoot": "~/.codingpowerup/worktrees" },
   "projects": [
     { "key": "goalzen", "path": "~/goalzen", "checkCommand": "npm run check", "rebuildCommand": "bash scripts/rebuild.sh staging application" }
   ]
 }
 ```
 
-`connect` writes `server`; `projects` is the same shape the control plane's own in-process
-runner reads (`IRunnerProjectConfig`). `FACTORY_RUNNER_CONFIG` names another file;
-`CODINGPOWERUP_HOME` another directory.
+`connect` writes `server`; `capacity` is optional (two builds at once and
+`~/.codingpowerup/worktrees` by default); `projects` is `IRunnerProjectConfig[]` from the shared
+types. `FACTORY_RUNNER_CONFIG` names another file; `CODINGPOWERUP_HOME` another directory.
 
 ## Development
 
@@ -59,4 +73,7 @@ npm run dev -- status
 ```
 
 Node 20 or later. On the dev droplet the runner runs under PM2 from `ecosystem.config.js`
-(`pm2 start ecosystem.config.js` after a build).
+(`pm2 start ecosystem.config.js` after a build), which loads the runner's own `.env`
+(git-ignored) when there is one: put `CLAUDE_CODE_OAUTH_TOKEN=...` there, from
+`claude setup-token`, so the agent runs under the subscription. The tests
+(`npm test`) use throwaway git repositories and a stub of the Agent SDK.

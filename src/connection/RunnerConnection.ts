@@ -6,8 +6,8 @@ import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import WebSocket from 'ws';
 import {
-  ERunnerMessageType, IRunnerCapabilities, IRunnerEnvelope, IRunnerErrorPayload, IRunnerHeartbeatPayload, IRunnerProjectPresence, IRunnerRegisteredPayload,
-  IRunnerRegisterPayload, IRunnerRevokedPayload, RUNNER_CLOSE_CODES, RUNNER_PROTOCOL_VERSION,
+  ERunnerMessageType, IHeavyQueueStatus, IRunnerCapabilities, IRunnerEnvelope, IRunnerErrorPayload, IRunnerHeartbeatPayload, IRunnerHeldJob, IRunnerProjectPresence,
+  IRunnerRegisteredPayload, IRunnerRegisterPayload, IRunnerRevokedPayload, RUNNER_CLOSE_CODES, RUNNER_PROTOCOL_VERSION,
 } from '@yellowmelon/factory-global-types';
 
 export const RUNNER_SOCKET_PATH = '/runner/ws';
@@ -25,6 +25,8 @@ export interface IRunnerConnectionOptions {
   capabilities: () => Promise<IRunnerCapabilities>;
   projects: () => Promise<IRunnerProjectPresence[]>;
   activeJobs?: () => string[];
+  heldJobs?: () => IRunnerHeldJob[];       // what the ledger holds, for reconciliation
+  queue?: () => IHeavyQueueStatus;         // the build queue, for the rail
   log?: (line: string) => void;
 }
 
@@ -85,10 +87,19 @@ export class RunnerConnection extends EventEmitter {
     return true;
   }
 
+  // The queue alone, cheaply, whenever it changes
+  reportQueue(queue: IHeavyQueueStatus): void {
+    if (!this.isOnline()) return;
+    this.send(ERunnerMessageType.STATUS, { queue, activeJobs: this.options.activeJobs ? this.options.activeJobs() : [] });
+  }
+
   // Tell the server what the machine has now (after a checkout appeared, say)
   async reportStatus(): Promise<void> {
     if (!this.isOnline()) return;
-    this.send(ERunnerMessageType.STATUS, { capabilities: await this.options.capabilities(), projects: await this.options.projects(), activeJobs: this.options.activeJobs ? this.options.activeJobs() : [] });
+    this.send(ERunnerMessageType.STATUS, {
+      capabilities: await this.options.capabilities(), projects: await this.options.projects(),
+      activeJobs: this.options.activeJobs ? this.options.activeJobs() : [], jobs: this.options.heldJobs ? this.options.heldJobs() : [], queue: this.options.queue ? this.options.queue() : undefined,
+    });
   }
 
   private setState(state: TConnectionState): void {
@@ -121,6 +132,8 @@ export class RunnerConnection extends EventEmitter {
           hostname: this.options.hostname,
           capabilities: await this.options.capabilities(),
           projects: await this.options.projects(),
+          jobs: this.options.heldJobs ? this.options.heldJobs() : [],
+          queue: this.options.queue ? this.options.queue() : undefined,
         };
         this.send(ERunnerMessageType.REGISTER, payload);
       } catch (err) {

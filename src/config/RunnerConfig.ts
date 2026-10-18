@@ -4,7 +4,7 @@
 // writes the server part.
 import fs from 'fs';
 import path from 'path';
-import { IRunnerProjectConfig } from '@yellowmelon/factory-global-types';
+import { IRunnerCapacityConfig, IRunnerProjectConfig } from '@yellowmelon/factory-global-types';
 import { configFilePath, expandHome, writePrivateFile } from '../platform/platform';
 
 export interface IRunnerServerConfig {
@@ -18,6 +18,7 @@ export interface IRunnerServerConfig {
 
 export interface IRunnerConfigFile {
   server?: IRunnerServerConfig;
+  capacity?: IRunnerCapacityConfig;
   projects: IRunnerProjectConfig[];
 }
 

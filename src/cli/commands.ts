@@ -8,6 +8,9 @@ import { detectCapabilities } from '../capabilities/capabilities';
 import { describeProjects } from '../repositories/RepositoryRegistry';
 import { RunnerConnection } from '../connection/RunnerConnection';
 import { configFilePath, hostname, platform } from '../platform/platform';
+import { JobDispatcher } from '../jobs/JobDispatcher';
+import { JobLedger } from '../jobs/JobLedger';
+import { heavyQueueStatus, queueEvents } from '../queue/HeavyWorkQueue';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { version: RUNNER_VERSION } = require('../../package.json') as { version: string };
@@ -55,6 +58,10 @@ export const start = async (): Promise<RunnerConnection> => {
   const server = requireServer(config);
 
   log(`codingpowerup-runner ${RUNNER_VERSION} on ${platform()} (${hostname()}), ${config.projects.length} project(s) configured`);
+  if (config.capacity?.concurrency && !process.env.FACTORY_HEAVY_CONCURRENCY) process.env.FACTORY_HEAVY_CONCURRENCY = String(config.capacity.concurrency);
+
+  const ledger = new JobLedger();
+  let dispatcher: JobDispatcher | null = null;
 
   const connection = new RunnerConnection({
     serverUrl: server.url,
@@ -65,8 +72,14 @@ export const start = async (): Promise<RunnerConnection> => {
     hostname: hostname(),
     capabilities: detectCapabilities,
     projects: () => describeProjects(readRunnerConfig().projects),
+    activeJobs: () => (dispatcher ? dispatcher.activeJobIds() : []),
+    heldJobs: () => (dispatcher ? dispatcher.heldJobs() : ledger.all()),
+    queue: heavyQueueStatus,
     log,
   });
+
+  dispatcher = new JobDispatcher(connection, ledger, { serverUrl: server.url, credential: server.credential });
+  queueEvents.on('change', (queue) => connection.reportQueue(queue));
 
   connection.on('state', (state) => log(`State: ${state}`));
   connection.start();

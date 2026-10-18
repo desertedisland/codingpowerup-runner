@@ -45,6 +45,10 @@ reports where it listens. One served preview per project; a preview idle for
 `capacity.previewIdleMinutes` (30) is stopped and the server told; every process the runner
 starts is in `~/.codingpowerup/processes.json`, so a restart stops what the last run left behind.
 
+A browser test batch asks for `start_application`: the application runs from the checkout on
+ports of its own beside any preview, without an idle stop, and `stop_application` ends it when
+the batch is done; the Playwright browser on this machine tests it at 127.0.0.1.
+
 A browser looking at a served preview reaches it through the control plane's **relay**: each
 request arrives here as a `PREVIEW_REQUEST` frame (with body chunks), `src/preview/PreviewTunnel`
 makes the HTTP request to the application on its local port and streams the answer back as

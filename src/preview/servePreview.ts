@@ -28,6 +28,7 @@ export interface IServedPreview {
   startedAt: Date;
   lastTouchedAt: Date;
   idleTimer?: NodeJS.Timeout;
+  isPreview: boolean; // the project's preview slot, as opposed to an application started for a test batch
 }
 
 export type TPreviewStoppedListener = (payload: IPreviewStoppedPayload) => void;
@@ -59,8 +60,9 @@ export class ServedPreviews {
     return host ? `http://${host}:${ports.client}` : undefined;
   }
 
+  // The project's one preview (applications started for other reasons do not count)
   byProject(projectKey: string): IServedPreview | undefined {
-    return [...this.previews.values()].find((preview) => preview.projectKey === projectKey);
+    return [...this.previews.values()].find((preview) => preview.projectKey === projectKey && preview.isPreview);
   }
 
   get(previewId: string): IServedPreview | undefined { return this.previews.get(previewId); }
@@ -82,17 +84,20 @@ export class ServedPreviews {
     preview.idleTimer.unref?.();
   }
 
-  // Start the application of a working copy and wait until it answers
-  async start(payload: IStartPreviewPayload, onProgress?: (note: string) => void): Promise<IStartApplicationResult & { commit?: string; workingPath: string }> {
+  // Start the application of a working copy and wait until it answers. A preview takes the
+  // project's one preview slot (the previous one makes way) and stops when idle; an application
+  // for something else (a test batch) takes a slot of its own and runs until it is stopped.
+  async start(payload: IStartPreviewPayload, onProgress?: (note: string) => void, options: { exclusive?: boolean; idles?: boolean } = {}): Promise<IStartApplicationResult & { commit?: string; workingPath: string }> {
 
     const { project, source, label } = payload;
     const entry = localProjectConfig(project);
     if (!entry?.startCommand) throw new Error(`${project.name} has no start command on this runner, so it cannot be served.`);
 
+    const exclusive = options.exclusive !== false;
     const previewId = payload.previewId || `${project.key}-${Date.now()}`;
 
-    // One per project: the previous one makes way
-    const existing = this.byProject(project.key);
+    // One preview per project: the previous one makes way
+    const existing = exclusive ? this.byProject(project.key) : undefined;
     if (existing) await this.stop(existing.previewId, `replaced by ${label}`, false);
 
     let workingPath: string;
@@ -124,9 +129,9 @@ export class ServedPreviews {
         : `${project.name} did not answer at ${readyUrl} within ${readiness.timeoutSeconds} s:\n${tail}`);
     }
 
-    const preview: IServedPreview = { previewId, projectKey: project.key, processId, ports, localUrl, reachableUrl: this.reachableUrlFor(ports), workingPath, commit, startedAt: new Date(), lastTouchedAt: new Date() };
+    const preview: IServedPreview = { previewId, projectKey: project.key, processId, ports, localUrl, reachableUrl: this.reachableUrlFor(ports), workingPath, commit, startedAt: new Date(), lastTouchedAt: new Date(), isPreview: exclusive };
     this.previews.set(previewId, preview);
-    this.armIdleTimer(preview);
+    if (options.idles !== false) this.armIdleTimer(preview);
 
     // The application dying on its own is a stop too
     managed.once('exit', () => {

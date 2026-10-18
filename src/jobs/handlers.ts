@@ -208,9 +208,10 @@ export const handlers: { [K in ERunnerJobKind]: THandler<K> } = {
     return { ok: true as const };
   },
 
-  [ERunnerJobKind.START_APPLICATION]: async ({ project, workingPath, label, previewId }, context) => {
+  // An application for a test batch: beside any preview, on ports of its own, until stopped
+  [ERunnerJobKind.START_APPLICATION]: async ({ project, source, label, previewId }, context) => {
     if (!projectCanServe(project)) throw new JobError(ERunnerErrorCode.NO_PREVIEW_HERE, `${project.name} has no start command on this runner.`);
-    const started = await context.served.start({ project, source: { kind: 'session', workingPath }, label, strategy: 'serve', previewId }, (text) => context.onProgress({ kind: 'note', text }));
+    const started = await context.served.start({ project, source, label, strategy: 'serve', previewId: previewId || `app-${Date.now()}` }, (text) => context.onProgress({ kind: 'note', text }), { exclusive: false, idles: false });
     return { processId: started.processId, ports: started.ports, localUrl: started.localUrl, reachableUrl: started.reachableUrl, outputTail: started.outputTail };
   },
 

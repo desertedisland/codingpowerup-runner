@@ -93,11 +93,25 @@ describe('a served preview', () => {
 
   it('one per project: a second preview replaces the first on new ports', async () => {
     const first = await start('a');
+    const firstPid = registry.get(first.processId).pid;
     const second = await start('b');
-    // The first is gone (its ports may well be reused), the second answers
-    expect(await answers(first.localUrl)).toBeNull();
+    // The first process is gone (its ports may well be reused by the second), the second answers
+    expect(isAlive(firstPid)).toBe(false);
     expect(await answers(second.localUrl)).toMatch(/hello/);
     expect(served.all().map((preview) => preview.previewId)).toEqual(['p-b']);
+    expect(registry.all().filter((managed) => managed.isRunning()).map((managed) => managed.options.id)).toEqual([second.processId]);
+  });
+
+  it('an application started beside the preview (a test batch) takes its own ports and leaves the preview alone', async () => {
+    const preview = await start('p');
+    const forTests = await served.start({ project, source: { kind: 'checkout' }, label: 'tests', strategy: 'serve', previewId: 'app-1' }, undefined, { exclusive: false, idles: false });
+    expect(forTests.ports.client).not.toEqual(preview.ports.client);
+    expect(await answers(preview.localUrl)).toMatch(/hello/);
+    expect(await answers(forTests.localUrl)).toMatch(/hello/);
+    expect(served.byProject('sample').previewId).toEqual('p-p');
+    expect(served.all()).toHaveLength(2);
+    await served.stop('app-1', 'batch done', false);
+    expect(await answers(preview.localUrl)).toMatch(/hello/);
   });
 
   it('explains a crash at startup with the output, and a readiness timeout', async () => {

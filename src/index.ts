@@ -10,3 +10,4 @@ export { handlers } from './jobs/handlers';
 export { ManagedProcess } from './processes/ManagedProcess';
 export { ProcessRegistry } from './processes/ProcessRegistry';
 export { ServedPreviews } from './preview/servePreview';
+export { PreviewTunnel } from './preview/PreviewTunnel';

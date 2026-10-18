@@ -13,6 +13,7 @@ import { JobLedger } from '../jobs/JobLedger';
 import { heavyQueueStatus, queueEvents } from '../queue/HeavyWorkQueue';
 import { ProcessRegistry } from '../processes/ProcessRegistry';
 import { ServedPreviews } from '../preview/servePreview';
+import { PreviewTunnel } from '../preview/PreviewTunnel';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { version: RUNNER_VERSION } = require('../../package.json') as { version: string };
@@ -85,6 +86,8 @@ export const start = async (): Promise<RunnerConnection> => {
   });
 
   dispatcher = new JobDispatcher(connection, ledger, { serverUrl: server.url, credential: server.credential }, served);
+  // Browser requests for served previews arrive over the same socket (the relay, step 7)
+  new PreviewTunnel(connection, served);
   queueEvents.on('change', (queue) => connection.reportQueue(queue));
 
   connection.on('state', (state) => log(`State: ${state}`));

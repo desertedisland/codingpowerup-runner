@@ -45,6 +45,11 @@ reports where it listens. One served preview per project; a preview idle for
 `capacity.previewIdleMinutes` (30) is stopped and the server told; every process the runner
 starts is in `~/.codingpowerup/processes.json`, so a restart stops what the last run left behind.
 
+A browser looking at a served preview reaches it through the control plane's **relay**: each
+request arrives here as a `PREVIEW_REQUEST` frame (with body chunks), `src/preview/PreviewTunnel`
+makes the HTTP request to the application on its local port and streams the answer back as
+`PREVIEW_RESPONSE` and body frames, and the preview counts as in use.
+
 The owner's permission switches (run the agent, run commands, push, start applications) reach
 the runner at register and whenever they change, and a job a switch forbids is refused here as
 well as on the control plane.

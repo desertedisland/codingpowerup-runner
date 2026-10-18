@@ -65,6 +65,7 @@
     "moduleNameMapper": {
       "^@anthropic-ai/claude-agent-sdk$": "<rootDir>/src/testUtils/agentSdkStub.ts"
     },
-    "testTimeout": 30000
+    "testTimeout": 30000,
+    "forceExit": true
   }
 }

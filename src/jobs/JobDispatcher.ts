@@ -14,6 +14,7 @@ import { handlers, JobError, toRunnerError } from './handlers';
 import { JobLedger } from './JobLedger';
 import { interrupt } from '../agents/AgentRunner/AgentRunner';
 import { IAttachmentSource } from '../attachments/attachments';
+import { ServedPreviews } from '../preview/servePreview';
 
 const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -28,7 +29,7 @@ export class JobDispatcher {
   private readonly callbacks = new Map<string, IPendingCallback>();
   private readonly turnKeys = new Map<string, string>(); // jobId -> the agent turn's key, for cancel
 
-  constructor(private readonly connection: RunnerConnection, private readonly ledger: JobLedger, private readonly attachments: IAttachmentSource) {
+  constructor(private readonly connection: RunnerConnection, private readonly ledger: JobLedger, private readonly attachments: IAttachmentSource, private readonly served: ServedPreviews) {
 
     // Anything the runner was in the middle of when it last stopped cannot be carried on
     const interrupted = ledger.markInterruptedByRestart();
@@ -37,6 +38,8 @@ export class JobDispatcher {
     connection.on('frame', (envelope: IRunnerEnvelope) => this.onFrame(envelope));
     // Once the server has heard the held jobs in REGISTER, the finished ones can go
     connection.on('registered', () => this.forgetReported());
+    // A served preview the runner stopped on its own (idle, the application died) is reported
+    served.onStopped((payload) => { this.send(ERunnerMessageType.PREVIEW_STOPPED, payload); });
 
   }
 
@@ -120,6 +123,7 @@ export class JobDispatcher {
         onOperation: (operation) => { const frame: IOperationPayload = { jobId: job.jobId, operation }; this.send(ERunnerMessageType.OPERATION, frame); },
         onCallback: this.callback(job.jobId),
         attachments: this.attachments,
+        served: this.served,
       });
       outcome = { jobId: job.jobId, kind: job.kind, status: 'succeeded', result, startedAt, finishedAt: new Date().toISOString() };
       logger.info(`[jobs] ${job.jobId} ${job.kind} succeeded`);

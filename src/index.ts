@@ -7,3 +7,6 @@ export { connect, start, status } from './cli/commands';
 export { JobDispatcher } from './jobs/JobDispatcher';
 export { JobLedger } from './jobs/JobLedger';
 export { handlers } from './jobs/handlers';
+export { ManagedProcess } from './processes/ManagedProcess';
+export { ProcessRegistry } from './processes/ProcessRegistry';
+export { ServedPreviews } from './preview/servePreview';

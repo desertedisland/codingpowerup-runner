@@ -11,6 +11,8 @@ import { configFilePath, hostname, platform } from '../platform/platform';
 import { JobDispatcher } from '../jobs/JobDispatcher';
 import { JobLedger } from '../jobs/JobLedger';
 import { heavyQueueStatus, queueEvents } from '../queue/HeavyWorkQueue';
+import { ProcessRegistry } from '../processes/ProcessRegistry';
+import { ServedPreviews } from '../preview/servePreview';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { version: RUNNER_VERSION } = require('../../package.json') as { version: string };
@@ -61,6 +63,10 @@ export const start = async (): Promise<RunnerConnection> => {
   if (config.capacity?.concurrency && !process.env.FACTORY_HEAVY_CONCURRENCY) process.env.FACTORY_HEAVY_CONCURRENCY = String(config.capacity.concurrency);
 
   const ledger = new JobLedger();
+  const processes = new ProcessRegistry();
+  const orphans = await processes.cleanUpOrphans();
+  if (orphans > 0) log(`Stopped ${orphans} application(s) left over from the last run`);
+  const served = new ServedPreviews(processes);
   let dispatcher: JobDispatcher | null = null;
 
   const connection = new RunnerConnection({
@@ -78,14 +84,17 @@ export const start = async (): Promise<RunnerConnection> => {
     log,
   });
 
-  dispatcher = new JobDispatcher(connection, ledger, { serverUrl: server.url, credential: server.credential });
+  dispatcher = new JobDispatcher(connection, ledger, { serverUrl: server.url, credential: server.credential }, served);
   queueEvents.on('change', (queue) => connection.reportQueue(queue));
 
   connection.on('state', (state) => log(`State: ${state}`));
   connection.start();
 
-  const shutdown = (signal: string) => {
+  const shutdown = async (signal: string) => {
     log(`${signal} received; stopping`);
+    // Served applications go first, while the socket is still up to say so
+    await served.stopAll('the runner is shutting down').catch(() => undefined);
+    await processes.stopAll().catch(() => undefined);
     connection.stop(signal);
     setTimeout(() => process.exit(0), 200);
   };

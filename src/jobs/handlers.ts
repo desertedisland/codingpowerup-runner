@@ -19,6 +19,7 @@ import { createSessionWorktree, landOnRelease, MergeConflictError, removeSession
 import { readGitHistory } from '../git/ProjectHistory/ProjectHistory';
 import { sandboxStats } from '../git/sandboxStats/sandboxStats';
 import { buildPreview } from '../preview/previewBuild';
+import { projectCanServe, ServedPreviews } from '../preview/servePreview';
 import { canBuildFromCallback, handlersFromCallback, TCallbackHandler } from './callbacks';
 import { fetchSessionAttachments, IAttachmentSource } from '../attachments/attachments';
 
@@ -36,6 +37,7 @@ export interface IJobContext {
   onOperation: (operation: { name: string; file?: string; input?: Record<string, unknown> }) => void;
   onCallback: TCallbackHandler;
   attachments: IAttachmentSource;
+  served: ServedPreviews; // the applications this runner is serving as previews
 }
 
 type THandler<K extends ERunnerJobKind> = (payload: TRunnerJobPayload<K>, context: IJobContext) => Promise<TRunnerJobResult<K>>;
@@ -54,6 +56,7 @@ const inspectProject = async (project: IRunnerProjectRef): Promise<IRunnerProjec
     checkCommand: entry.checkCommand,
     rebuildCommand: entry.rebuildCommand,
     canRebuildPreview: !!entry.rebuildCommand && !entry.rebuildsTheFactory,
+    canServePreview: !!entry.startCommand,
     rebuildsTheFactory: !!entry.rebuildsTheFactory,
   };
 
@@ -183,14 +186,39 @@ export const handlers: { [K in ERunnerJobKind]: THandler<K> } = {
   [ERunnerJobKind.PROJECT_HISTORY]: ({ project, since }) => readGitHistory(project, since ? new Date(since) : undefined),
 
   [ERunnerJobKind.START_PREVIEW]: async (payload, context) => {
+    if (payload.strategy === 'serve') {
+      if (!projectCanServe(payload.project)) throw new JobError(ERunnerErrorCode.NO_PREVIEW_HERE, `${payload.project.name} has no start command on this runner, so it cannot be served.`);
+      try {
+        const served = await context.served.start(payload, (text) => context.onProgress({ kind: 'note', text }));
+        return { ok: true, workingPath: served.workingPath, commit: served.commit, outputTail: served.outputTail, localUrl: served.localUrl, reachableUrl: served.reachableUrl, ports: served.ports };
+      } catch (err) {
+        // A start that failed is an answer the owner reads, not a job failure: the record shows the output
+        return { ok: false, workingPath: '', outputTail: (err as Error).message };
+      }
+    }
     if (!projectRebuildCommand(payload.project) || projectRebuildsTheFactory(payload.project)) {
       throw new JobError(ERunnerErrorCode.NO_PREVIEW_HERE, `${payload.project.name} has no preview site to rebuild here.`);
     }
     return buildPreview(payload, context.onProgress);
   },
 
-  // Nothing to stop: a rebuilt site keeps showing its build (the `serve` strategy, step 6, stops a process)
-  [ERunnerJobKind.STOP_PREVIEW]: async () => ({ ok: true as const }),
+  // A served preview's application is stopped; a rebuilt site keeps showing its build
+  [ERunnerJobKind.STOP_PREVIEW]: async ({ previewId }, context) => {
+    await context.served.stop(previewId, 'stopped by the factory', false);
+    return { ok: true as const };
+  },
+
+  [ERunnerJobKind.START_APPLICATION]: async ({ project, workingPath, label, previewId }, context) => {
+    if (!projectCanServe(project)) throw new JobError(ERunnerErrorCode.NO_PREVIEW_HERE, `${project.name} has no start command on this runner.`);
+    const started = await context.served.start({ project, source: { kind: 'session', workingPath }, label, strategy: 'serve', previewId }, (text) => context.onProgress({ kind: 'note', text }));
+    return { processId: started.processId, ports: started.ports, localUrl: started.localUrl, reachableUrl: started.reachableUrl, outputTail: started.outputTail };
+  },
+
+  [ERunnerJobKind.STOP_APPLICATION]: async ({ processId }, context) => {
+    const preview = context.served.all().find((candidate) => candidate.processId === processId);
+    if (preview) await context.served.stop(preview.previewId, 'stopped by the factory', false);
+    return { ok: true as const };
+  },
 
   [ERunnerJobKind.RESTART_FACTORY]: async ({ project, workingPath, logFile }) => {
     const command = projectRebuildCommand(project);

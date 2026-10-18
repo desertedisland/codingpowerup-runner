@@ -36,6 +36,15 @@ codingpowerup-runner status
   nothing; a runner that restarted reports what it was running as failed.
 - `status` prints the local config and asks the server what it thinks.
 
+A project whose `runner.json` entry has a `startCommand` is **served**: `start_preview` with the
+`serve` strategy runs the application from the working copy on two free ports from
+`capacity.portRange` (default 20000 to 20999), handed to the command as `API_PORT`, `CLIENT_PORT`
+and `PORT` with `HOST=127.0.0.1`, waits until the `readiness` URL answers (`${CLIENT_PORT}` and
+`${API_PORT}` are filled in; by default `http://127.0.0.1:${CLIENT_PORT}/` for 180 s), and
+reports where it listens. One served preview per project; a preview idle for
+`capacity.previewIdleMinutes` (30) is stopped and the server told; every process the runner
+starts is in `~/.codingpowerup/processes.json`, so a restart stops what the last run left behind.
+
 The owner's permission switches (run the agent, run commands, push, start applications) reach
 the runner at register and whenever they change, and a job a switch forbids is refused here as
 well as on the control plane.

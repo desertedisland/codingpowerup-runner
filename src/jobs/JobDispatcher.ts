@@ -5,12 +5,12 @@
 // result is never lost to a dropped line.
 import { randomUUID } from 'crypto';
 import {
-  ERunnerJobKind, ERunnerMessageType, ICallbackPayload, ICallbackResultPayload, ICancelJobPayload, IJobAcceptedPayload, IJobCompletedPayload, IJobFailedPayload,
-  IJobProgressPayload, IOperationPayload, IRunJobPayload, IRunnerEnvelope, IRunnerHeldJob, TRunnerCallbackName,
+  ERunnerErrorCode, ERunnerJobKind, ERunnerMessageType, ICallbackPayload, ICallbackResultPayload, ICancelJobPayload, IJobAcceptedPayload, IJobCompletedPayload,
+  IJobFailedPayload, IJobProgressPayload, IOperationPayload, IRunJobPayload, IRunnerEnvelope, IRunnerHeldJob, JOB_KIND_PERMISSIONS, TRunnerCallbackName,
 } from '@yellowmelon/factory-global-types';
 import logger from '../log/logger';
 import { RunnerConnection } from '../connection/RunnerConnection';
-import { handlers, toRunnerError } from './handlers';
+import { handlers, JobError, toRunnerError } from './handlers';
 import { JobLedger } from './JobLedger';
 import { interrupt } from '../agents/AgentRunner/AgentRunner';
 import { IAttachmentSource } from '../attachments/attachments';
@@ -110,6 +110,11 @@ export class JobDispatcher {
 
     try {
       if (!handler) throw new Error(`Unknown job kind ${job.kind}`);
+      // The owner's switches, as the server told this runner; the server checks them too
+      const needed = JOB_KIND_PERMISSIONS[job.kind];
+      if (needed && this.connection.permissions[needed] === false) {
+        throw new JobError(ERunnerErrorCode.PERMISSION_DENIED, `This runner is not allowed to ${needed.replace(/([A-Z])/g, ' $1').toLowerCase()}; an owner can switch it on from the Runners page.`);
+      }
       const result = await handler(job.payload, {
         onProgress: (progress) => { const frame: IJobProgressPayload = { jobId: job.jobId, progress }; this.send(ERunnerMessageType.JOB_PROGRESS, frame); },
         onOperation: (operation) => { const frame: IOperationPayload = { jobId: job.jobId, operation }; this.send(ERunnerMessageType.OPERATION, frame); },

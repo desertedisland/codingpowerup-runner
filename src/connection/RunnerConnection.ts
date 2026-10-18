@@ -6,8 +6,9 @@ import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import WebSocket from 'ws';
 import {
-  ERunnerMessageType, IHeavyQueueStatus, IRunnerCapabilities, IRunnerEnvelope, IRunnerErrorPayload, IRunnerHeartbeatPayload, IRunnerHeldJob, IRunnerProjectPresence,
-  IRunnerRegisteredPayload, IRunnerRegisterPayload, IRunnerRevokedPayload, RUNNER_CLOSE_CODES, RUNNER_PROTOCOL_VERSION,
+  DEFAULT_RUNNER_PERMISSIONS, ERunnerMessageType, IHeavyQueueStatus, IRunnerCapabilities, IRunnerEnvelope, IRunnerErrorPayload, IRunnerHeartbeatPayload,
+  IRunnerHeldJob, IRunnerPermissions, IRunnerPermissionsPayload, IRunnerProjectPresence, IRunnerRegisteredPayload, IRunnerRegisterPayload, IRunnerRevokedPayload,
+  RUNNER_CLOSE_CODES, RUNNER_PROTOCOL_VERSION,
 } from '@yellowmelon/factory-global-types';
 
 export const RUNNER_SOCKET_PATH = '/runner/ws';
@@ -46,6 +47,8 @@ export class RunnerConnection extends EventEmitter {
   state: TConnectionState = 'offline';
   registered: IRunnerRegisteredPayload | null = null;
   stopReason: string | null = null;
+  // What the owner lets this runner do, from REGISTERED and every PERMISSIONS frame since
+  permissions: IRunnerPermissions = { ...DEFAULT_RUNNER_PERMISSIONS };
 
   private socket: WebSocket | null = null;
   private heartbeat: NodeJS.Timeout | null = null;
@@ -171,6 +174,7 @@ export class RunnerConnection extends EventEmitter {
     switch (envelope.type) {
       case ERunnerMessageType.REGISTERED: {
         this.registered = envelope.payload as IRunnerRegisteredPayload;
+        if (this.registered.permissions) this.permissions = { ...DEFAULT_RUNNER_PERMISSIONS, ...this.registered.permissions };
         this.backoffMs = INITIAL_BACKOFF_MS;
         this.setState('online');
         this.log(`Online as "${this.registered.name}" (${this.registered.runnerId}); heartbeat every ${this.registered.heartbeatIntervalMs} ms`);
@@ -181,6 +185,13 @@ export class RunnerConnection extends EventEmitter {
       case ERunnerMessageType.REQUEST_STATUS:
         this.reportStatus().catch((err) => this.log(`Could not report status: ${err.message}`));
         return;
+      case ERunnerMessageType.PERMISSIONS: {
+        const payload = envelope.payload as IRunnerPermissionsPayload;
+        this.permissions = { ...DEFAULT_RUNNER_PERMISSIONS, ...(payload?.permissions || {}) };
+        this.log(`Permissions now: ${Object.entries(this.permissions).filter(([, allowed]) => !allowed).map(([key]) => `no ${key}`).join(', ') || 'everything'}`);
+        this.emit('permissions', this.permissions);
+        return;
+      }
       case ERunnerMessageType.REVOKED: {
         const payload = envelope.payload as IRunnerRevokedPayload;
         this.log(`Revoked by the server: ${payload?.reason || 'no reason given'}`);

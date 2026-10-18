@@ -36,6 +36,10 @@ codingpowerup-runner status
   nothing; a runner that restarted reports what it was running as failed.
 - `status` prints the local config and asks the server what it thinks.
 
+The owner's permission switches (run the agent, run commands, push, start applications) reach
+the runner at register and whenever they change, and a job a switch forbids is refused here as
+well as on the control plane.
+
 The agent's live tools (the plan tools, the Explore tools, the Build-mode question) are
 answered by the control plane over the socket, one `CALLBACK` frame per call. The owner's
 uploaded files are fetched per session into `~/.codingpowerup/attachments`, read-only to the

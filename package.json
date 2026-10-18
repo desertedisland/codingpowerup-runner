@@ -1,0 +1,55 @@
+{
+  "name": "@codingpowerup/runner",
+  "version": "0.1.0",
+  "description": "The CodingPowerUp runner: the process that does the development work on a machine you control",
+  "license": "MIT",
+  "author": "Yellow Melon",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/desertedisland/codingpowerup-runner.git"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "codingpowerup-runner": "dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "jest",
+    "dev": "ts-node src/cli/main.ts",
+    "start": "node dist/cli/main.js start"
+  },
+  "dependencies": {
+    "@yellowmelon/factory-global-types": "file:../zenfactory/factory-global-types",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.18.2",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    },
+    "moduleFileExtensions": ["ts", "js", "json"],
+    "testPathIgnorePatterns": ["/node_modules/", "/dist/"]
+  }
+}

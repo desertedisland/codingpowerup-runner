@@ -11,8 +11,8 @@ API. Other platforms come later: the code is one TypeScript core with a `src/pla
 for what differs per OS, wrapped by the CLI now and by service installers and a tray later.
 
 The specification is `docs/runner/SPEC.md` in the zenfactory repository. The protocol types
-are `@yellowmelon/factory-global-types` (its `runner/` folder), linked from the zenfactory
-checkout beside this one until the package is published.
+are `@yellowmelon/factory-global-types` (its `runner/` folder), published on npm from the
+zenfactory repository.
 
 ## What works (steps 3 and 4 of the spec)
 
